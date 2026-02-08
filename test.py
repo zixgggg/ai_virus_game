@@ -4,6 +4,7 @@ import threading
 import json
 import os
 import time
+import platform
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -21,10 +22,38 @@ class VirusLock:
         self.root = root
         self.root.title("AI SYSTEM LOCK")
         
-        # 真正中毒時解除下面兩行的註解
-        # self.root.attributes("-fullscreen", True) 
-        # self.root.attributes("-topmost", True)   
+
+        # --- 鎖定強化區 ---
+        self.root.overrideredirect(True) 
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        self.root.geometry(f"{sw}x{sh}+0+0")
+        self.root.attributes("-topmost", True)   
         
+        self.root.protocol("WM_DELETE_WINDOW", self.prevent_close)
+        self.root.bind("<Alt-F4>", self.prevent_close)
+        
+        # [關鍵修正] 獲取全域焦點抓取
+        # 這會強制讓所有鍵盤與滑鼠事件停留在這個視窗，防止 Win 鍵跳出選單
+        self.root.grab_set()
+
+
+
+        # --- 鎖定強化區 ---
+        # 移除標題欄與邊框 (這會讓視窗從 Alt+Tab 的小視窗預覽中消失)
+        self.root.overrideredirect(True) 
+        
+        # 強制全螢幕與置頂
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        self.root.geometry(f"{sw}x{sh}+0+0")
+        self.root.attributes("-topmost", True)   
+        
+        # 攔截關閉事件 (Alt+F4 或任何關閉要求)
+        self.root.protocol("WM_DELETE_WINDOW", self.prevent_close)
+        self.root.bind("<Alt-F4>", self.prevent_close)
+        # ----------------
+
         self.root.configure(bg="#0a0a0a")
 
         # 紀錄對話歷史
@@ -39,28 +68,28 @@ class VirusLock:
         ]
 
         self.setup_ui()
-
-        # --- 焦點強化邏輯啟動 ---
-        self.start_focus_loop()
+        
+        # 啟動焦點強化循環
+        self.force_focus_loop()
 
     def setup_ui(self):
         # 標題
         self.title_label = tk.Label(
-            self.root, text="[ 系統已遭 AI 接管 ]", 
+            self.root, text="[ 系統已遭 AI 接管 (測試版 輸入a可以直接解鎖或是按右下角的關閉按鈕)]", 
             font=("Courier New", 30, "bold"), fg="#ff0000", bg="#0a0a0a"
         )
-        self.title_label.pack(pady=20)
+        self.title_label.pack(pady=40)
 
         # 聊天室記錄區
         self.chat_display = scrolledtext.ScrolledText(
             self.root, font=("Consolas", 14), bg="#1a1a1a", fg="#00ff00",
             state='disabled', width=80, height=15, borderwidth=0
         )
-        self.chat_display.pack(pady=10, padx=50, fill="both", expand=True)
+        self.chat_display.pack(pady=10, padx=100, fill="both", expand=True)
 
         # 輸入區域容器
         input_frame = tk.Frame(self.root, bg="#0a0a0a")
-        input_frame.pack(fill="x", side="bottom", padx=50, pady=30)
+        input_frame.pack(fill="x", side="bottom", padx=100, pady=50)
 
         # 輸入框
         self.user_input = tk.Entry(
@@ -69,6 +98,7 @@ class VirusLock:
         )
         self.user_input.pack(side="left", fill="x", expand=True, ipady=8)
         self.user_input.bind("<Return>", lambda e: self.process_input())
+        self.user_input.focus_set()
 
         # 發送按鈕
         self.send_btn = tk.Button(
@@ -77,16 +107,36 @@ class VirusLock:
         )
         self.send_btn.pack(side="right", padx=10)
 
-        # 初始問候
+
+
+        self.test_close_btn = tk.Button(
+            self.root, 
+            text="測試關閉 (EXIT)", 
+            command=self.root.destroy,
+            bg="#220000", 
+            fg="#555555", 
+            font=("Arial", 9),
+            activebackground="#ff0000"
+        )
+        self.test_close_btn.place(relx=0.99, rely=0.99, anchor="se")
+
+
+
+
+
         self.append_chat("AI", "證明你能擁有這臺電腦")
 
-    # --- 新增的焦點處理函數 ---
-    def start_focus_loop(self):
-        """強化焦點搶回邏輯：確保視窗置頂且輸入框可用"""
-        self.root.focus_force()      # 強制抓取系統焦點
-        self.user_input.focus_set()  # 將輸入焦點給 Entry 組件
-        # 每 150 毫秒重複一次。150ms 是實驗出來不干擾打字的平衡點
-        self.root.after(150, self.start_focus_loop)
+    def prevent_close(self, event=None):
+        """拒絕任何關閉請求"""
+        self.append_chat("AI", "別白費力氣了，Alt+F4 對我無效。")
+        return "break"
+
+    def force_focus_loop(self):
+        """強化焦點搶回邏輯"""
+        self.root.focus_force()
+        self.user_input.focus_set()
+        # 每 150 毫秒執行一次，確保視窗始終處於活動狀態
+        self.root.after(150, self.force_focus_loop)
 
     def append_chat(self, sender, text):
         self.chat_display.config(state='normal')
@@ -124,6 +174,7 @@ class VirusLock:
         self.chat_display.delete("end-3l", "end-1l") 
         self.chat_display.config(state='disabled')
         self.typewriter_effect(reply)
+
         if can_unlock:
             self.append_chat("系統", "正在關閉進程...")
             self.root.after(2000, self.root.destroy)
@@ -142,7 +193,8 @@ class VirusLock:
             self.messages.append({"role": "assistant", "content": reply})
             self.root.after(0, lambda: self.remove_thinking_and_reply(reply, can_unlock))
         except Exception as e:
-            self.root.after(0, lambda: self.remove_thinking_and_reply(f"連線中斷: {str(e)}", False))
+            error_msg = f"連線中斷: {str(e)}"
+            self.root.after(0, lambda: self.remove_thinking_and_reply(error_msg, False))
 
 if __name__ == "__main__":
     root = tk.Tk()
